@@ -175,15 +175,20 @@ class AmazonLogin:
         inputs[name] = value
         return inputs
 
-    def _get_request_from_soup(self, soup: BeautifulSoup) -> tuple[str, URL]:
+    def _get_request_from_soup(
+        self, soup: BeautifulSoup, default_url: URL | None = None
+    ) -> tuple[str, URL]:
         """Extract URL and method for the next request."""
         _LOGGER.debug("Get request data from HTML source")
         form = soup.find("form", {"name": "signIn"}) or soup.find("form")
         if isinstance(form, Tag):
             method = form.get("method")
-            url = form.get("action")
-            if isinstance(method, str) and isinstance(url, str):
-                return method, URL(url)
+            action = form.get("action")
+            if isinstance(method, str) and isinstance(action, str):
+                if action:
+                    return method, URL(action)
+                if default_url is not None:
+                    return method, default_url
         raise CannotAuthenticate("Unable to extract form data from response")
 
     def _extract_code_from_url(self, url: URL) -> str:
@@ -359,7 +364,9 @@ class AmazonLogin:
             )
 
         if login_soup.find("form", id="auth-select-device-form"):
-            login_method, login_url = self._get_request_from_soup(login_soup)
+            login_method, login_url = self._get_request_from_soup(
+                login_soup, default_url=login_url
+            )
             login_inputs = self._select_totp_mfa_device(login_soup)
             _LOGGER.debug("Selecting Amazon authenticator-app MFA method")
             login_soup, _ = await self._http_wrapper.session_request(
