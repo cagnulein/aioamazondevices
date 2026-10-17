@@ -116,9 +116,14 @@ class AmazonLogin:
         url = URL.joinpath(self._session_state_data.retail_site_url, URI_SIGNIN)
         return url.with_query(oauth_params)
 
-    def _get_inputs_from_soup(self, soup: BeautifulSoup) -> dict[str, str]:
-        """Extract hidden form input fields from a Amazon login page."""
-        form = soup.find("form", {"name": "signIn"}) or soup.find("form")
+    def _get_inputs_from_soup(
+        self, soup: BeautifulSoup, form_id: str | None = None
+    ) -> dict[str, str]:
+        """Extract hidden form input fields from an Amazon login page."""
+        if form_id:
+            form = soup.find("form", {"id": form_id})
+        else:
+            form = soup.find("form", {"name": "signIn"}) or soup.find("form")
 
         if not isinstance(form, Tag):
             raise CannotAuthenticate("Unable to find form in login response")
@@ -131,6 +136,42 @@ class AmazonLogin:
                 if isinstance(name, str) and isinstance(value, str):
                     inputs[name] = value
 
+        return inputs
+
+    def _select_totp_mfa_device(self, soup: BeautifulSoup) -> dict[str, str]:
+        """Build the request selecting Amazon's authenticator-app MFA method."""
+        form = soup.find("form", {"id": "auth-select-device-form"})
+        if not isinstance(form, Tag):
+            raise CannotAuthenticate("Unable to find MFA device selection form")
+
+        inputs = self._get_inputs_from_soup(soup, "auth-select-device-form")
+        totp_input: Tag | None = None
+        for node in form.select("div[data-a-input-name='otpDeviceContext']"):
+            classes = node.get("class", [])
+            if isinstance(classes, str):
+                classes = [classes]
+            if "auth-TOTP" in classes:
+                candidate = node.find("input", {"name": "otpDeviceContext"})
+                if isinstance(candidate, Tag):
+                    totp_input = candidate
+                    break
+
+        if totp_input is None:
+            candidate = form.select_one(
+                "input[name='otpDeviceContext'][value$=', TOTP']"
+            )
+            if isinstance(candidate, Tag):
+                totp_input = candidate
+
+        if totp_input is None:
+            raise CannotAuthenticate("Authenticator app MFA method not found")
+
+        name = totp_input.get("name")
+        value = totp_input.get("value")
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise CannotAuthenticate("Authenticator app MFA method is invalid")
+
+        inputs[name] = value
         return inputs
 
     def _get_request_from_soup(self, soup: BeautifulSoup) -> tuple[str, URL]:
@@ -314,6 +355,16 @@ class AmazonLogin:
             _LOGGER.debug("Captcha challenge found, retrying with Japanese")
             login_url, login_soup = await self._oauth_login(
                 code_verifier, registration_language="ja_JP"
+            )
+
+        if login_soup.find("form", id="auth-select-device-form"):
+            login_method, login_url = self._get_request_from_soup(login_soup)
+            login_inputs = self._select_totp_mfa_device(login_soup)
+            _LOGGER.debug("Selecting Amazon authenticator-app MFA method")
+            login_soup, _ = await self._http_wrapper.session_request(
+                method=login_method,
+                url=login_url,
+                input_data=login_inputs,
             )
 
         if not login_soup.find("input", id="auth-mfa-otpcode"):
