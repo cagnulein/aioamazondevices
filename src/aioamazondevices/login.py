@@ -373,6 +373,31 @@ class AmazonLogin:
                 url=login_url,
                 input_data=login_inputs,
             )
+            page_title = (
+                login_soup.title.get_text(" ", strip=True)
+                if login_soup.title
+                else None
+            )
+            form_ids = sorted(
+                {
+                    str(form.get("id"))
+                    for form in login_soup.find_all("form")
+                    if form.get("id")
+                }
+            )
+            input_names = sorted(
+                {
+                    str(item.get("id") or item.get("name"))
+                    for item in login_soup.find_all("input")
+                    if item.get("id") or item.get("name")
+                }
+            )
+            _LOGGER.debug(
+                "Post-MFA-selection page markers title=%r forms=%s inputs=%s",
+                page_title,
+                form_ids,
+                input_names,
+            )
 
         if not login_soup.find("input", id="auth-mfa-otpcode"):
             _LOGGER.debug(
