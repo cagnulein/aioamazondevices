@@ -27,6 +27,21 @@ def test_request_uses_default_url_for_empty_form_action() -> None:
     assert _login()._get_request_from_soup(soup, default_url=url) == ("post", url)
 
 
+def test_request_uses_mfa_selection_form() -> None:
+    """Use the MFA form action instead of an unrelated sign-in form."""
+    soup = BeautifulSoup(
+        """
+        <form name="signIn" method="post" action="/signin"></form>
+        <form id="auth-select-device-form" method="post" action="/mfa/new-otp"></form>
+        """,
+        "html.parser",
+    )
+
+    assert _login()._get_request_from_soup(
+        soup, form_id="auth-select-device-form"
+    ) == ("post", URL("/mfa/new-otp"))
+
+
 def test_select_totp_mfa_device() -> None:
     """Select the authenticator-app option and preserve hidden fields."""
     soup = BeautifulSoup(
