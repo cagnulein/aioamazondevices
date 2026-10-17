@@ -5,6 +5,7 @@
 
 import pytest
 from bs4 import BeautifulSoup
+from yarl import URL
 
 from aioamazondevices.exceptions import CannotAuthenticate
 from aioamazondevices.login import AmazonLogin
@@ -13,6 +14,17 @@ from aioamazondevices.login import AmazonLogin
 def _login() -> AmazonLogin:
     """Build a login instance without creating an HTTP session."""
     return object.__new__(AmazonLogin)
+
+
+def test_request_uses_default_url_for_empty_form_action() -> None:
+    """Amazon's MFA selection form can post back to the current URL."""
+    soup = BeautifulSoup(
+        '<form id="auth-select-device-form" method="post" action=""></form>',
+        "html.parser",
+    )
+    url = URL("https://www.amazon.com/ap/signin/session")
+
+    assert _login()._get_request_from_soup(soup, default_url=url) == ("post", url)
 
 
 def test_select_totp_mfa_device() -> None:
