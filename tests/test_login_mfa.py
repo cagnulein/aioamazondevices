@@ -39,6 +39,7 @@ def test_select_totp_mfa_device() -> None:
           <div data-a-input-name="otpDeviceContext" class="auth-TOTP">
             <input type="radio" name="otpDeviceContext" value="totp, TOTP">
           </div>
+          <button type="submit" name="continue" value="Continue">Continue</button>
         </form>
         """,
         "html.parser",
@@ -47,6 +48,7 @@ def test_select_totp_mfa_device() -> None:
     assert _login()._select_totp_mfa_device(soup) == {
         "workflowState": "state",
         "otpDeviceContext": "totp, TOTP",
+        "continue": "Continue",
     }
 
 

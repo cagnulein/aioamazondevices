@@ -173,6 +173,19 @@ class AmazonLogin:
             raise CannotAuthenticate("Authenticator app MFA method is invalid")
 
         inputs[name] = value
+        for control in form.find_all(["input", "button"]):
+            control_type = str(control.get("type", "")).lower()
+            if control.name == "input" and control_type not in {
+                "submit",
+                "button",
+                "image",
+            }:
+                continue
+            control_name = control.get("name")
+            control_value = control.get("value")
+            if isinstance(control_name, str) and isinstance(control_value, str):
+                inputs[control_name] = control_value
+
         return inputs
 
     def _get_request_from_soup(
